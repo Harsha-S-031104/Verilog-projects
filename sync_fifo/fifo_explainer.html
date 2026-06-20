@@ -1,0 +1,940 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Synchronous FIFO: Exam-Night Visualizer</title>
+  <!-- DM Sans & Fira Code Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Fira+Code:wght@300..700&display=swap" rel="stylesheet">
+  
+  <style>
+    :root {
+      --bg: #0a0f24;
+      --surface: #101835;
+      --surface-elevated: #16224f;
+      --border: rgba(30, 58, 138, 0.4);
+      --border-bright: #2563eb;
+      --text: #e2e8f0;
+      --text-dim: #94a3b8;
+      
+      /* Accents */
+      --accent-write: #38bdf8; /* Blue */
+      --accent-read: #fb923c;  /* Orange */
+      --color-success: #34d399; /* Green */
+      --color-danger: #f87171;  /* Red */
+      --color-warn: #fbbf24;    /* Yellow */
+      
+      --font-body: 'DM Sans', sans-serif;
+      --font-mono: 'Fira Code', monospace;
+    }
+
+    /* Simple Blueprint Grid Background */
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: var(--bg);
+      background-image: 
+        linear-gradient(rgba(37, 99, 235, 0.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(37, 99, 235, 0.05) 1px, transparent 1px);
+      background-size: 20px 20px;
+      color: var(--text);
+      font-family: var(--font-body);
+      line-height: 1.5;
+    }
+
+    header {
+      border-bottom: 1px solid var(--border);
+      padding: 1.5rem 2rem;
+      background: rgba(16, 24, 53, 0.8);
+      backdrop-filter: blur(8px);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    h1 span.badge {
+      font-size: 0.75rem;
+      background: var(--border-bright);
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+      text-transform: uppercase;
+      font-family: var(--font-mono);
+    }
+
+    .subtitle {
+      font-size: 0.875rem;
+      color: var(--text-dim);
+      margin: 0;
+    }
+
+    main {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 2rem;
+      padding: 2rem;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    @media (min-width: 1024px) {
+      main {
+        grid-template-columns: 1.2fr 0.8fr;
+      }
+    }
+
+    /* Cards / Containers */
+    .ve-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .ve-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 4px;
+      height: 100%;
+      background: transparent;
+    }
+
+    .ve-card.write-card::before { background: var(--accent-write); }
+    .ve-card.read-card::before { background: var(--accent-read); }
+    .ve-card.theory-card::before { background: var(--border-bright); }
+
+    .card-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-top: 0;
+      margin-bottom: 1rem;
+      color: #fff;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px dashed var(--border);
+      padding-bottom: 0.5rem;
+    }
+
+    .card-title span.mono-label {
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      color: var(--text-dim);
+    }
+
+    /* Simulation Layout */
+    .sim-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    /* Circular Buffer Representation */
+    .circle-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 340px;
+      position: relative;
+      margin: 1rem 0;
+    }
+
+    .circular-ring {
+      width: 280px;
+      height: 280px;
+      border-radius: 50%;
+      border: 2px dashed rgba(37, 99, 235, 0.2);
+      position: relative;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .center-status {
+      position: absolute;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      width: 140px;
+      height: 140px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 50%;
+      box-shadow: inset 0 0 15px rgba(0,0,0,0.5);
+    }
+
+    .center-status .count {
+      font-family: var(--font-mono);
+      font-size: 2rem;
+      font-weight: 700;
+      color: #fff;
+      line-height: 1;
+    }
+
+    .center-status .label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-dim);
+      margin-top: 0.25rem;
+    }
+
+    .slot {
+      position: absolute;
+      width: 42px;
+      height: 42px;
+      background: var(--surface-elevated);
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      transform: translate(calc(125px * cos(var(--angle))), calc(125px * sin(var(--angle))));
+    }
+
+    .slot .index {
+      font-size: 0.6rem;
+      color: var(--text-dim);
+      position: absolute;
+      top: 1px;
+    }
+
+    .slot .data-val {
+      font-weight: 700;
+      color: var(--text-dim);
+      margin-top: 8px;
+    }
+
+    .slot.active-data {
+      border-color: rgba(37, 99, 235, 0.5);
+      background: rgba(37, 99, 235, 0.1);
+    }
+
+    .slot.active-data .data-val {
+      color: #fff;
+    }
+
+    /* Pointer indicators */
+    .pointer-marker {
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 0.6rem;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      color: #fff;
+      box-shadow: 0 0 10px rgba(0,0,0,0.5);
+      transition: all 0.3s ease;
+      z-index: 10;
+    }
+
+    .pointer-marker.wr-ptr {
+      background: var(--accent-write);
+      border: 2px solid #fff;
+      transform: translate(calc(155px * cos(var(--angle))), calc(155px * sin(var(--angle))));
+    }
+
+    .pointer-marker.rd-ptr {
+      background: var(--accent-read);
+      border: 2px solid #fff;
+      transform: translate(calc(95px * cos(var(--angle))), calc(95px * sin(var(--angle))));
+    }
+
+    /* Interface controls */
+    .controls-wrapper {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      justify-content: center;
+      background: rgba(16, 24, 53, 0.4);
+      padding: 1rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+
+    .btn {
+      padding: 0.6rem 1.2rem;
+      border-radius: 6px;
+      font-weight: 600;
+      font-family: var(--font-body);
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .btn-write {
+      background: var(--accent-write);
+      color: #000;
+    }
+
+    .btn-write:hover {
+      background: #7dd3fc;
+      transform: translateY(-1px);
+    }
+
+    .btn-read {
+      background: var(--accent-read);
+      color: #000;
+    }
+
+    .btn-read:hover {
+      background: #fed7aa;
+      transform: translateY(-1px);
+    }
+
+    .btn-reset {
+      background: transparent;
+      color: var(--text-dim);
+      border: 1px solid var(--border);
+    }
+
+    .btn-reset:hover {
+      color: #fff;
+      border-color: var(--text-dim);
+    }
+
+    .btn:active {
+      transform: translateY(0);
+    }
+
+    input.input-val {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.6rem;
+      color: #fff;
+      font-family: var(--font-mono);
+      width: 70px;
+      text-align: center;
+    }
+
+    input.input-val:focus {
+      outline: none;
+      border-color: var(--border-bright);
+    }
+
+    /* Flags display */
+    .flags-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.75rem;
+    }
+
+    .flag-badge {
+      background: var(--surface-elevated);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.5rem;
+      text-align: center;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      color: var(--text-dim);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.25rem;
+      transition: all 0.3s ease;
+    }
+
+    .flag-badge .indicator {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .flag-badge.active-true {
+      border-color: var(--border-bright);
+      color: #fff;
+    }
+
+    /* Flag specific colors */
+    .flag-badge.active-true.empty-flag .indicator { background: var(--color-warn); box-shadow: 0 0 8px var(--color-warn); }
+    .flag-badge.active-true.full-flag .indicator { background: var(--color-danger); box-shadow: 0 0 8px var(--color-danger); }
+    .flag-badge.active-true.almost-full .indicator { background: var(--color-danger); opacity: 0.7; }
+    .flag-badge.active-true.almost-empty .indicator { background: var(--color-warn); opacity: 0.7; }
+    .flag-badge.active-true.overflow-flag .indicator { background: var(--color-danger); box-shadow: 0 0 8px var(--color-danger); }
+    .flag-badge.active-true.underflow-flag .indicator { background: var(--color-danger); box-shadow: 0 0 8px var(--color-danger); }
+
+    /* Console / Logs */
+    .console-box {
+      background: #050814;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.75rem;
+      height: 110px;
+      overflow-y: auto;
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      display: flex;
+      flex-direction: column-reverse;
+      gap: 0.25rem;
+    }
+
+    .console-line {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .console-line .timestamp {
+      color: var(--text-dim);
+    }
+
+    .console-line.info { color: var(--text); }
+    .console-line.write { color: var(--accent-write); }
+    .console-line.read { color: var(--accent-read); }
+    .console-line.error { color: var(--color-danger); font-weight: bold; }
+
+    /* Right Column: Teaching Material */
+    .theory-wrapper {
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .buddy-chat-bubble {
+      background: var(--surface-elevated);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+      border-top-left-radius: 0;
+      position: relative;
+    }
+
+    .buddy-chat-bubble::before {
+      content: "🎓 YOUR MATE (EXAM MODE)";
+      position: absolute;
+      top: -10px;
+      left: 10px;
+      background: var(--border-bright);
+      color: #fff;
+      font-family: var(--font-mono);
+      font-size: 0.6rem;
+      padding: 0.1rem 0.4rem;
+      border-radius: 4px;
+      font-weight: 700;
+    }
+
+    .analogy-box {
+      border-left: 3px solid var(--color-warn);
+      background: rgba(251, 191, 36, 0.05);
+      padding: 0.75rem;
+      border-radius: 4px;
+      margin: 1rem 0;
+      font-style: italic;
+    }
+
+    .code-snippet {
+      background: #050814;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.75rem;
+      overflow-x: auto;
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+    }
+
+    .code-comment {
+      color: var(--text-dim);
+    }
+
+    .code-keyword {
+      color: #f472b6;
+    }
+
+    .code-type {
+      color: #4ade80;
+    }
+
+    /* Collapsible sections */
+    details {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.5rem 0.75rem;
+      background: var(--surface);
+      margin-bottom: 0.5rem;
+    }
+
+    summary {
+      font-weight: 700;
+      cursor: pointer;
+      outline: none;
+      user-select: none;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    summary::-webkit-details-marker {
+      display: none;
+    }
+
+    summary::after {
+      content: "→";
+      font-family: var(--font-mono);
+      color: var(--text-dim);
+      transition: transform 0.2s ease;
+    }
+
+    details[open] summary::after {
+      transform: rotate(90deg);
+    }
+
+    .details-content {
+      margin-top: 0.5rem;
+      border-top: 1px dashed var(--border);
+      padding-top: 0.5rem;
+      font-size: 0.85rem;
+    }
+
+    /* Animation effects */
+    @keyframes pulse-write {
+      0% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.5); }
+      70% { box-shadow: 0 0 0 10px rgba(56, 189, 248, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0); }
+    }
+
+    @keyframes pulse-read {
+      0% { box-shadow: 0 0 0 0 rgba(251, 146, 60, 0.5); }
+      70% { box-shadow: 0 0 0 10px rgba(251, 146, 60, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(251, 146, 60, 0); }
+    }
+
+    .pulse-w { animation: pulse-write 0.5s ease-out; }
+    .pulse-r { animation: pulse-read 0.5s ease-out; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div>
+      <h1><span>⚙️</span> Synchronous FIFO Interactive <span class="badge">RTL Spec</span></h1>
+      <p class="subtitle">A visual model of the hardware queue before coding</p>
+    </div>
+    <div style="text-align: right;">
+      <span style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--border-bright);">DEPTH: 16 | DATA_WIDTH: 8</span>
+    </div>
+  </header>
+
+  <main>
+    <!-- LEFT COLUMN: INTERACTIVE VISUALIZER -->
+    <section class="sim-grid">
+      <div class="ve-card">
+        <div class="card-title">
+          <span>Circular Buffer Simulation</span>
+          <span class="mono-label">sync_fifo.v</span>
+        </div>
+        
+        <!-- Interactive Circle visualizer -->
+        <div class="circle-container">
+          <div class="circular-ring" id="ring">
+            <!-- Slots will be rendered here dynamically via JS -->
+            <div class="center-status">
+              <span class="count" id="count-display">0</span>
+              <span class="label">Elements</span>
+            </div>
+            
+            <!-- Pointer Indicators -->
+            <div class="pointer-marker wr-ptr" id="wr-marker" style="--angle: 0rad;">W</div>
+            <div class="pointer-marker rd-ptr" id="rd-marker" style="--angle: 0rad;">R</div>
+          </div>
+        </div>
+
+        <!-- Controls -->
+        <div class="controls-wrapper">
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <label style="font-size: 0.8rem; color: var(--text-dim);">Data (Hex):</label>
+            <input type="text" id="data-input" class="input-val" value="A5" maxlength="2">
+          </div>
+          <button class="btn btn-write" id="btn-push">Push (Write)</button>
+          <button class="btn btn-read" id="btn-pop">Pop (Read)</button>
+          <button class="btn btn-reset" id="btn-reset">Reset</button>
+        </div>
+      </div>
+
+      <!-- Flags and Console -->
+      <div class="ve-card">
+        <div class="card-title">
+          <span>FIFO Flags & Operations Log</span>
+          <span class="mono-label">Hardware status signals</span>
+        </div>
+        <div class="flags-grid">
+          <div class="flag-badge empty-flag" id="flag-empty">
+            <span class="indicator"></span>
+            <span>Empty</span>
+          </div>
+          <div class="flag-badge full-flag" id="flag-full">
+            <span class="indicator"></span>
+            <span>Full</span>
+          </div>
+          <div class="flag-badge almost-full" id="flag-almost-full">
+            <span class="indicator"></span>
+            <span>Almost Full (≥12)</span>
+          </div>
+          <div class="flag-badge almost-empty" id="flag-almost-empty">
+            <span class="indicator"></span>
+            <span>Almost Empty (≤4)</span>
+          </div>
+          <div class="flag-badge overflow-flag" id="flag-overflow">
+            <span class="indicator"></span>
+            <span>Overflow</span>
+          </div>
+          <div class="flag-badge underflow-flag" id="flag-underflow">
+            <span class="indicator"></span>
+            <span>Underflow</span>
+          </div>
+        </div>
+        
+        <div style="margin-top: 1rem;">
+          <div class="console-box" id="console">
+            <!-- Console log entries will go here -->
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- RIGHT COLUMN: BUDDY TEACHING & CHEAT SHEET -->
+    <section class="theory-wrapper">
+      <div class="ve-card theory-card">
+        <div class="card-title">
+          <span>Exam Crash Course: FIFO 101</span>
+          <span class="mono-label">1-day-before-exam.md</span>
+        </div>
+        
+        <div class="buddy-chat-bubble">
+          <p style="margin: 0;"><strong>Bhai, listen up!</strong> Don't panic. FIFO is just a queue. If you understand how people queue up at a McDonald's counter, you know FIFO. 
+          First customer orders, first customer gets the burger. 
+          Let's break it down so you can write the logic on the exam paper tomorrow.</p>
+        </div>
+
+        <div class="analogy-box">
+          <strong>🍔 The Fast Food Counter Analogy:</strong><br>
+          Imagine a counter with <strong>16 slots</strong> (depth). 
+          The cashier (Write) puts orders in slots, and the chef (Read) takes them out to cook.<br>
+          - <code>wr_ptr</code> tells the cashier where to put the NEXT order.<br>
+          - <code>rd_ptr</code> tells the chef which order is NEXT to cook.<br>
+          - Pointers move in a circle. When they hit slot 15, they wrap back to 0!
+        </div>
+
+        <!-- Collapsible questions -->
+        <h3 style="font-size: 0.95rem; text-transform: uppercase; color: var(--accent-write); margin-top: 1.5rem;">Must-Know Exam Questions</h3>
+        
+        <details>
+          <summary>Q1. Why do we need ADDR_WIDTH + 1 bits for Pointers?</summary>
+          <div class="details-content">
+            If depth is 16, we need 4 bits (0 to 15) to address slots. But if we only use 4 bits, when <code>wr_ptr == rd_ptr</code>, is the FIFO empty or completely full? The address bits look identical!
+            <br><br>
+            <strong>The Trick:</strong> Use <strong>5 bits</strong> (MSB is the wrap-around bit). 
+            <ul>
+              <li>If <code>wr_ptr == rd_ptr</code> (all bits match): <strong>FIFO is Empty</strong>.</li>
+              <li>If <code>wr_ptr[3:0] == rd_ptr[3:0]</code> but <code>wr_ptr[4] != rd_ptr[4]</code> (lower bits match but MSB differs): <strong>FIFO is Full</strong> (Write pointer completed one more circle than Read pointer).</li>
+            </ul>
+          </div>
+        </details>
+
+        <details>
+          <summary>Q2. Write Pointer and Read Pointer update logic?</summary>
+          <div class="details-content">
+            <p>On every clock cycle, we only increment a pointer if we perform a valid operation.</p>
+            <div class="code-snippet">
+              <span class="code-comment">// Write pointer increment logic</span><br>
+              <span class="code-keyword">always</span> @(<span class="code-keyword">posedge</span> clk) <span class="code-keyword">begin</span><br>
+              &nbsp;&nbsp;<span class="code-keyword">if</span> (rst) wr_ptr <= 0;<br>
+              &nbsp;&nbsp;<span class="code-keyword">else if</span> (wr_en && !full) wr_ptr <= wr_ptr + 1;<br>
+              <span class="code-keyword">end</span>
+            </div>
+            <br>
+            Same goes for <code>rd_ptr</code>: only increments if read is enabled and FIFO is not empty!
+          </div>
+        </details>
+
+        <details>
+          <summary>Q3. How do we calculate flags? (The RTL math)</summary>
+          <div class="details-content">
+            <div class="code-snippet">
+              <span class="code-comment">// Empty flag: when pointers are exactly identical</span><br>
+              <span class="code-keyword">assign</span> empty = (wr_ptr == rd_ptr);<br><br>
+              <span class="code-comment">// Full flag: address matches but MSB wrap-around bits are different</span><br>
+              <span class="code-keyword">assign</span> full = (wr_ptr[ADDR_WIDTH-1:0] == rd_ptr[ADDR_WIDTH-1:0]) && (wr_ptr[ADDR_WIDTH] != rd_ptr[ADDR_WIDTH]);
+            </div>
+            <p>For almost_full and almost_empty, we can calculate the current count of elements:
+            <br><code>count = wr_ptr - rd_ptr</code></p>
+          </div>
+        </details>
+
+        <details>
+          <summary>Q4. What are Overflow and Underflow?</summary>
+          <div class="details-content">
+            <ul>
+              <li><strong>Overflow:</strong> Writing into a full FIFO. The data gets ignored and we raise a sticky flag to warn the system.</li>
+              <li><strong>Underflow:</strong> Reading from an empty FIFO. The output is junk/unstable, and we raise a warning flag.</li>
+            </ul>
+            In your testbench, you must test these boundary conditions to prove your design doesn't crash!
+          </div>
+        </details>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    // FIFO Simulation Variables
+    const DEPTH = 16;
+    const ALMOST_FULL_LIMIT = 12;
+    const ALMOST_EMPTY_LIMIT = 4;
+    
+    let mem = Array(DEPTH).fill("XX");
+    let wr_ptr = 0; // 5-bit representation internally
+    let rd_ptr = 0; // 5-bit representation internally
+    let count = 0;
+    
+    // Flag status registers
+    let overflow = false;
+    let underflow = false;
+
+    // Elements
+    const ring = document.getElementById("ring");
+    const countDisplay = document.getElementById("count-display");
+    const dataInput = document.getElementById("data-input");
+    const wrMarker = document.getElementById("wr-marker");
+    const rdMarker = document.getElementById("rd-marker");
+    const consoleBox = document.getElementById("console");
+
+    // Flag badges
+    const fEmpty = document.getElementById("flag-empty");
+    const fFull = document.getElementById("flag-full");
+    const fAlmostFull = document.getElementById("flag-almost-full");
+    const fAlmostEmpty = document.getElementById("flag-almost-empty");
+    const fOverflow = document.getElementById("flag-overflow");
+    const fUnderflow = document.getElementById("flag-underflow");
+
+    // Render Slots in circle
+    function renderSlots() {
+      // Clear old slots
+      const oldSlots = document.querySelectorAll(".slot");
+      oldSlots.forEach(s => s.remove());
+
+      for (let i = 0; i < DEPTH; i++) {
+        const slot = document.createElement("div");
+        slot.className = "slot";
+        if (mem[i] !== "XX") {
+          slot.classList.add("active-data");
+        }
+        
+        // Calculate angle for positioning in circular layout
+        // Subtract Math.PI/2 to start from top (12 o'clock)
+        const angle = (2 * Math.PI / DEPTH) * i - Math.PI / 2;
+        slot.style.setProperty("--angle", angle);
+        
+        slot.innerHTML = `
+          <span class="index">${i}</span>
+          <span class="data-val" id="val-${i}">${mem[i]}</span>
+        `;
+        ring.appendChild(slot);
+      }
+    }
+
+    // Update pointers positions
+    function updatePointers() {
+      // Map 5-bit index to 4-bit physical address
+      const wrIdx = wr_ptr % DEPTH;
+      const rdIdx = rd_ptr % DEPTH;
+
+      const wrAngle = (2 * Math.PI / DEPTH) * wrIdx - Math.PI / 2;
+      const rdAngle = (2 * Math.PI / DEPTH) * rdIdx - Math.PI / 2;
+
+      wrMarker.style.setProperty("--angle", wrAngle);
+      rdMarker.style.setProperty("--angle", rdAngle);
+    }
+
+    // Print to simulated hardware terminal
+    function logMessage(text, type = "info") {
+      const now = new Date();
+      const timeStr = now.toTimeString().split(' ')[0] + "." + String(now.getMilliseconds()).padStart(3, '0');
+      
+      const line = document.createElement("div");
+      line.className = `console-line ${type}`;
+      line.innerHTML = `<span class="timestamp">[${timeStr}]</span> <span>${text}</span>`;
+      consoleBox.insertBefore(line, consoleBox.firstChild);
+    }
+
+    // Re-calculate Flags
+    function updateFlags() {
+      // Empty logic: pointers are exactly the same
+      const isEmpty = (wr_ptr === rd_ptr);
+      
+      // Full logic: address matches but wrap-around bit differs
+      const wrAddr = wr_ptr % DEPTH;
+      const rdAddr = rd_ptr % DEPTH;
+      const wrWrap = Math.floor(wr_ptr / DEPTH) % 2;
+      const rdWrap = Math.floor(rd_ptr / DEPTH) % 2;
+      const isFull = (wrAddr === rdAddr) && (wrWrap !== rdWrap);
+
+      // Almost flags
+      const isAlmostFull = (count >= ALMOST_FULL_LIMIT);
+      const isAlmostEmpty = (count <= ALMOST_EMPTY_LIMIT && count > 0);
+
+      // Toggle styles based on flags status
+      toggleFlag(fEmpty, isEmpty);
+      toggleFlag(fFull, isFull);
+      toggleFlag(fAlmostFull, isAlmostFull);
+      toggleFlag(fAlmostEmpty, isAlmostEmpty);
+      toggleFlag(fOverflow, overflow);
+      toggleFlag(fUnderflow, underflow);
+
+      countDisplay.textContent = count;
+    }
+
+    function toggleFlag(element, active) {
+      if (active) {
+        element.classList.add("active-true");
+      } else {
+        element.classList.remove("active-true");
+      }
+    }
+
+    // Write Operation
+    function pushData() {
+      // Check full
+      const wrAddr = wr_ptr % DEPTH;
+      const rdAddr = rd_ptr % DEPTH;
+      const wrWrap = Math.floor(wr_ptr / DEPTH) % 2;
+      const rdWrap = Math.floor(rd_ptr / DEPTH) % 2;
+      const isFull = (wrAddr === rdAddr) && (wrWrap !== rdWrap);
+
+      if (isFull) {
+        overflow = true;
+        logMessage(`⚠️ ERROR: WRITE OVERFLOW! FIFO full at slot ${wrAddr}. Data dropped.`, "error");
+        updateFlags();
+        return;
+      }
+
+      // Get input data
+      let hexVal = dataInput.value.trim().toUpperCase();
+      if (!/^[0-9A-F]{1,2}$/.test(hexVal)) {
+        hexVal = Math.floor(Math.random() * 256).toString(16).toUpperCase().padStart(2, '0');
+      } else {
+        hexVal = hexVal.padStart(2, '0');
+      }
+
+      // Perform write
+      mem[wrAddr] = hexVal;
+      logMessage(`WRITE: Data 0x${hexVal} -> Address slot ${wrAddr}`, "write");
+      
+      // Increment write pointer (5-bit)
+      wr_ptr = (wr_ptr + 1) % (DEPTH * 2);
+      count++;
+      
+      // Pulse animation
+      const slotEl = document.querySelectorAll(".slot")[wrAddr];
+      if (slotEl) {
+        slotEl.classList.add("pulse-w");
+        setTimeout(() => slotEl.classList.remove("pulse-w"), 500);
+      }
+
+      renderSlots();
+      updatePointers();
+      updateFlags();
+
+      // Set random hex for next write
+      dataInput.value = Math.floor(Math.random() * 256).toString(16).toUpperCase().padStart(2, '0');
+    }
+
+    // Read Operation
+    function popData() {
+      // Check empty
+      const isEmpty = (wr_ptr === rd_ptr);
+
+      if (isEmpty) {
+        underflow = true;
+        logMessage("⚠️ ERROR: READ UNDERFLOW! FIFO empty. Returned garbage logic value 'XX'.", "error");
+        updateFlags();
+        return;
+      }
+
+      const rdAddr = rd_ptr % DEPTH;
+      const readVal = mem[rdAddr];
+      
+      logMessage(`READ: Data 0x${readVal} <- Address slot ${rdAddr}`, "read");
+      
+      // Clear data on read (for visual clean up, though real RAM keeps old value)
+      mem[rdAddr] = "XX";
+
+      // Increment read pointer (5-bit)
+      rd_ptr = (rd_ptr + 1) % (DEPTH * 2);
+      count--;
+
+      // Pulse animation
+      const slotEl = document.querySelectorAll(".slot")[rdAddr];
+      if (slotEl) {
+        slotEl.classList.add("pulse-r");
+        setTimeout(() => slotEl.classList.remove("pulse-r"), 500);
+      }
+
+      renderSlots();
+      updatePointers();
+      updateFlags();
+    }
+
+    // Reset FIFO
+    function resetFIFO() {
+      mem = Array(DEPTH).fill("XX");
+      wr_ptr = 0;
+      rd_ptr = 0;
+      count = 0;
+      overflow = false;
+      underflow = false;
+      
+      logMessage("RESET: FIFO cleared. Pointers and counters reset to 0.", "info");
+      
+      renderSlots();
+      updatePointers();
+      updateFlags();
+      
+      // Initial input val
+      dataInput.value = "A5";
+    }
+
+    // Setup listeners
+    document.getElementById("btn-push").addEventListener("click", pushData);
+    document.getElementById("btn-pop").addEventListener("click", popData);
+    document.getElementById("btn-reset").addEventListener("click", resetFIFO);
+
+    // Initial load
+    renderSlots();
+    updatePointers();
+    updateFlags();
+    logMessage("SYSTEM: Synchronous FIFO visualizer initialized. Default Depth = 16.", "info");
+  </script>
+</body>
+</html>
