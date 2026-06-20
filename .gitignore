@@ -1,3 +1,4 @@
 # ModelSim / QuestaSim / Verilog simulation outputs
 **/work/
 **/transcript
+*.vcd
